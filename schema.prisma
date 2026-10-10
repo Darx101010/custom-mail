@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum KeyStatus {
+  UNUSED
+  USED
+  REVOKED
+}
+
+enum Tier {
+  FREE
+  PREMIUM
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  name                 String?
+  email                String    @unique
+  emailVerified        DateTime?
+  image                String?
+  banned               Boolean   @default(false)
+  maxMailboxesOverride Int?
+  adminNote            String?
+  createdAt            DateTime  @default(now())
+
+  accounts     Account[]
+  sessions     Session[]
+  mailboxes    Mailbox[]
+  subscription Subscription?
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Mailbox {
+  id             String    @id @default(cuid())
+  address        String    @unique
+  userId         String
+  isActive       Boolean   @default(true)
+  label          String?
+  pinned         Boolean   @default(false)
+  autoDeleteDays Int       @default(0)
+  color          String?
+  icon           String?
+  muted          Boolean   @default(false)
+  archived       Boolean   @default(false)
+  rules          Json      @default("[]")
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+  blocked  BlockedSender[]
+
+  @@index([userId])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  mailboxId  String
+  fromAddr   String
+  fromName   String?
+  subject    String   @default("")
+  text       String?  @db.Text
+  html       String?  @db.Text
+  size       Int      @default(0)
+  read       Boolean  @default(false)
+  starred    Boolean  @default(false)
+  note       String?
+  deletedAt  DateTime?
+  receivedAt DateTime @default(now())
+
+  mailbox Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@index([mailboxId, receivedAt])
+  @@index([receivedAt])
+}
+
+model BlockedSender {
+  id        String  @id @default(cuid())
+  mailboxId String
+  address   String // عنوان كامل أو نطاق يبدأ بـ @
+  mailbox   Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@unique([mailboxId, address])
+}
+
+model Domain {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  active      Boolean @default(true)
+  premiumOnly Boolean @default(false)
+  isDefault   Boolean @default(false)
+}
+
+model Subscription {
+  userId    String    @id
+  lifetime  Boolean   @default(false)
+  expiresAt DateTime?
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LicenseKey {
+  id           String    @id @default(cuid())
+  keyHash      String    @unique
+  durationDays Int
+  status       KeyStatus @default(UNUSED)
+  note         String?
+  createdAt    DateTime  @default(now())
+  redeemedById String?
+  redeemedAt   DateTime?
+}
+
+model FeatureFlag {
+  id      String  @id // مثل mail.5
+  enabled Boolean @default(true)
+  tier    Tier    @default(PREMIUM)
+}
+
+model SiteSetting {
+  id                 Int     @id @default(1)
+  siteName           String  @default("بريدي الدائم")
+  freeMax            Int     @default(3)
+  premMax            Int     @default(25)
+  freeRetentionDays  Int     @default(7)
+  premRetentionDays  Int     @default(90)
+  maintenance        Boolean @default(false)
+  registrationOpen   Boolean @default(true)
+  announcement       String  @default("")
+  reserved           String  @default("admin,postmaster,abuse,root,support,security,noreply")
+}
+
+model AdminRole {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  permissions String[]
+  accounts    AdminAccount[]
+}
+
+model AdminAccount {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  roleId       String
+  active       Boolean   @default(true)
+  mustChange   Boolean   @default(true)
+  totpSecret   String?
+  tokenVersion Int       @default(0)
+  failedCount  Int       @default(0)
+  lockedUntil  DateTime?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  role         AdminRole @relation(fields: [roleId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String
+  action    String
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model AbuseReport {
+  id        String   @id @default(cuid())
+  address   String
+  reason    String
+  contact   String?
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

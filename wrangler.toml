@@ -1,0 +1,4 @@
+name = "mail-worker"
+main = "email-worker.ts"
+compatibility_date = "2026-01-01"
+# الأسرار: npx wrangler secret put WEBHOOK_URL  و  npx wrangler secret put WEBHOOK_SECRET
